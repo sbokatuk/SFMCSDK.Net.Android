@@ -50,12 +50,14 @@ public static class Packages
     /// <summary>
     /// Dependencies whose version legitimately differs per target framework, and what each group
     /// must say. Lifecycle.Process 2.10.0 - the sfmcsdk .pom's version - ships no net8 asset, so
-    /// the net8 head pins the last version that does; see Directory.Build.props. Asserted here so
-    /// a merge or an edit that flattens the split back to one version fails a test instead of a
-    /// consumer's restore.
+    /// the net8 head pins the last version that does; see Directory.Build.props. Lifecycle.Common
+    /// is pinned directly on net8 to resolve a conflict between Work.Runtime 2.11.0 and
+    /// GooglePlayServices.Basement 118.9.0 transitive bounds. Asserted here so a merge or an edit
+    /// that flattens the split back to one version fails a test instead of a consumer's restore.
     /// </summary>
     public static readonly (string Dependency, string Tfm, string Version)[] PerTfmDependencyVersions =
     [
+        ("Xamarin.AndroidX.Lifecycle.Common",  "net8.0-android34.0", "2.9.4"),
         ("Xamarin.AndroidX.Lifecycle.Process", "net8.0-android34.0", "2.9.4"),
         ("Xamarin.AndroidX.Lifecycle.Process", "net9.0-android35.0", "2.10.0"),
         ("Xamarin.AndroidX.Lifecycle.Process", "net10.0-android36.0", "2.10.0"),
