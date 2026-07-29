@@ -1,0 +1,1 @@
+# SFMCSDK.Net.Android
