@@ -129,6 +129,17 @@
     -->
     <SfmcSupportsMavenLibrary>true</SfmcSupportsMavenLibrary>
     <SfmcSupportsMavenLibrary Condition=" '$(TargetFramework)' == 'net8.0-android34.0' ">false</SfmcSupportsMavenLibrary>
+
+    <!--
+      A project whose artifacts' .pom chain cannot be resolved from one repository opts out of
+      @(AndroidMavenLibrary) on every target framework and takes the download path instead. No
+      project in THIS repository needs it - sfmcsdk's .pom chain lives entirely in Salesforce's
+      repository plus what NuGet supplies - but the sibling MarketingCloudSDK.Net.Android does
+      (its .poms import Google-hosted BOMs), and this file is kept a one-file port between the
+      two. The cost when set: Java dependency verification never runs for the project; the
+      checksum pins still verify every byte.
+    -->
+    <SfmcSupportsMavenLibrary Condition=" '$(SfmcResolveArtifactsDirectly)' == 'true' ">false</SfmcSupportsMavenLibrary>
   </PropertyGroup>
 
   <!--
