@@ -1,0 +1,10 @@
+# SHA-256 pins for every Maven artifact this repository resolves.
+#
+# Verified by the VerifySfmcMavenArtifactHashes target in src/Sfmc.Binding.props on every
+# build, on both resolution paths - @(AndroidMavenLibrary) and the direct-download fallback.
+# Regenerate with build/UpdateMavenChecksums.sh after a version bump; a hash that changes for
+# an UNCHANGED version is the tampering event these pins exist to catch.
+#
+# <file name> <sha256>
+sfmcsdk-3.1.1.aar 08c9034139feb11459eeb1b32519a324ada08614710d61d441da19b4d0568939
+common-internal-1.0.0.aar 60777baa788b430569a0316fe633c4ee7162e72e55e9f572d58fa54994c07aab

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="SFMCSDK.Net.Android.Example.MainPage">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="24,16" Spacing="12">
+
+            <Label Text="SFMCSDK.Net.Android"
+                   FontSize="24" FontAttributes="Bold"
+                   SemanticProperties.HeadingLevel="Level1" />
+            <Label Text="Drives the raw sfmcsdk binding: initialization, identity and event tracking. No credentials are baked in - the SDK runs against no tenant, so server calls fail by design; what this shows is the binding surface working."
+                   FontSize="13" />
+
+            <Button x:Name="InitializeButton"
+                    Text="Initialize the SDK"
+                    Clicked="OnInitializeClicked" />
+
+            <Label x:Name="StatusLabel" Text="Not initialized." FontAttributes="Bold" />
+
+            <BoxView HeightRequest="1" Color="{StaticResource Gray300}" />
+
+            <Entry x:Name="ProfileIdEntry"
+                   Placeholder="Profile id (contact key)"
+                   IsEnabled="False" />
+            <Button x:Name="ProfileIdButton"
+                    Text="Set profile id"
+                    IsEnabled="False"
+                    Clicked="OnSetProfileIdClicked" />
+
+            <Button x:Name="TrackButton"
+                    Text="Track a custom event"
+                    IsEnabled="False"
+                    Clicked="OnTrackClicked" />
+
+            <BoxView HeightRequest="1" Color="{StaticResource Gray300}" />
+
+            <Label Text="Log" FontAttributes="Bold" />
+            <Label x:Name="LogLabel" FontSize="12" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

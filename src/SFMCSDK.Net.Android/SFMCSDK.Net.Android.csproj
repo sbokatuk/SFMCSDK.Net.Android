@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <SfmcArtifact>sfmcsdk</SfmcArtifact>
+    <SfmcArtifactVersion>$(SfmcNativeVersion)</SfmcArtifactVersion>
+    <SfmcPackageId>SFMCSDK.Net.Android</SfmcPackageId>
+    <Description>.NET for Android bindings for the Salesforce Marketing Cloud SFMC SDK core module (com.salesforce.marketingcloud:sfmcsdk) - identity, event tracking, logging and the module plumbing the MobilePush module plugs into. Successor to the sfmc-net-bindings-mobile packages, at the Unified SDK generation.</Description>
+  </PropertyGroup>
+
+  <Import Project="../Sfmc.Binding.props" />
+
+  <ItemGroup>
+    <!--
+      common-internal is declared by the sfmcsdk .pom and exists nowhere else - it is
+      Salesforce-internal plumbing with no public API worth a C# projection, so it ships in THIS
+      package as an unbound .aar (Bind defaults to false via the ItemDefinitionGroup). The
+      sibling MarketingCloudSDK.Net.Android package deliberately does NOT carry it - two packages
+      shipping the same classes would fail the consuming app's build with duplicate-class errors
+      (XA4301) - it takes it from this package through its NuGet dependency instead.
+    -->
+    <SfmcMavenArtifact Include="com.salesforce.marketingcloud:common-internal"
+                       Version="$(SfmcCommonInternalVersion)" />
+  </ItemGroup>
+
+  <!--
+    The Java types sfmcsdk's .aar links against, one .NET binding package per .pom dependency.
+    kotlin-stdlib comes from Sfmc.Binding.props. Versions live in Directory.Build.props.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Xamarin.AndroidX.Core.Core.Ktx" Version="$(AndroidXCoreKtxVersion)" />
+    <!-- Split by head: 2.10.0 has no net8 asset. See Directory.Build.props for the reasoning. -->
+    <PackageReference Include="Xamarin.AndroidX.Lifecycle.Process" Version="$(AndroidXLifecycleProcessVersion)"
+                      Condition=" '$(TargetFramework)' != 'net8.0-android34.0' " />
+    <PackageReference Include="Xamarin.AndroidX.Lifecycle.Process" Version="$(AndroidXLifecycleProcessVersionNet8)"
+                      Condition=" '$(TargetFramework)' == 'net8.0-android34.0' " />
+    <PackageReference Include="Xamarin.AndroidX.Annotation" Version="$(AndroidXAnnotationVersion)" />
+    <PackageReference Include="Xamarin.GooglePlayServices.Basement" Version="$(GooglePlayServicesBasementVersion)" />
+    <PackageReference Include="Xamarin.AndroidX.Work.Runtime" Version="$(AndroidXWorkRuntimeVersion)" />
+    <PackageReference Include="Xamarin.AndroidX.Concurrent.Futures" Version="$(AndroidXConcurrentFuturesVersion)" />
+  </ItemGroup>
+
+</Project>

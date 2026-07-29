@@ -1,0 +1,334 @@
+name: build
+
+# Reusable pipeline: packs every SFMC binding package at a given version, validates the packed
+# packages, builds the sample against them, runs the emulator smoke tests, and uploads the packages
+# as an artifact. Callers (pr.yml, release.yml) decide the version and what to do with the result.
+
+on:
+  workflow_call:
+    inputs:
+      verify:
+        description: >
+          Whether to run the verification jobs — package validation, the sample builds, the
+          Release link checks and the e2e suites. Pull requests leave it at true, and are the only
+          place any of this runs. Releases pass false: the tagged commit was already verified on
+          its pull request, so a tag packs and publishes and nothing more. The gate is the same
+          input, with the same name and the same meaning, in every repository.
+        required: false
+        default: true
+        type: boolean
+      version:
+        description: NuGet version to stamp on every package.
+        required: true
+        type: string
+      native-version:
+        description: >
+          sfmcsdk version to bind against. Defaults to SfmcNativeVersion in
+          Directory.Build.props; set it to build a package for a different line.
+        required: false
+        default: ''
+        type: string
+      e2e-target-frameworks:
+        description: >
+          Which of the packages' target frameworks the emulator smoke tests run against, as a JSON
+          array. Defaults to the two extremes: net8, the oldest asset set and the one nothing else
+          exercises, and net10, whose assets are produced by the merge step in BuildNugets.sh and so
+          are the only ones that could be grafted in wrong. net9 sits between them and comes out of
+          the same pack pass as net8, so testing it too would buy little for the runner minutes.
+        required: false
+        default: '["net8.0-android34.0", "net10.0-android36.0"]'
+        type: string
+      e2e-api-level:
+        description: Android API level the emulator smoke test boots.
+        required: false
+        default: 35
+        type: number
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+
+jobs:
+  pack:
+    name: build and pack
+    timeout-minutes: 60
+    # Android builds need no Apple toolchain, so unlike the iOS bindings this runs on Linux -
+    # cheaper, faster, and with more disk for the Maven cache.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check README versions
+        run: ./build/CheckReadmeVersions.sh
+
+      # The .pro files every package ships are generated from the pinned .aars; regenerate them
+      # and fail on any difference, so a hand-edited file - or a native version bumped without
+      # rerunning the generator - cannot ship stale keep-rules. Before the .NET setup on
+      # purpose: the script needs only curl, shasum and unzip.
+      - name: Check committed R8 keep-rules for drift
+        run: |
+          ./build/generate-r8-rules.sh
+          git diff --exit-code src/*/buildTransitive/*.pro
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          # 9.0.x packs net8+net9 (global.json pins it) and 10.0.x packs net10.
+          dotnet-version: |
+            9.0.x
+            10.0.x
+
+      - name: Install Android workloads for every SDK band
+        run: |
+          # Each band supplies different reference packs: net8.0-android34.0 and
+          # net9.0-android35.0 come from the .NET 9 band, net10.0-android36.0 from the .NET 10
+          # band. The SDK is chosen by the global.json in the working directory, so each band is
+          # installed from a scratch directory pinned to that SDK.
+          for major in 9 10; do
+            dir="${RUNNER_TEMP}/sdk${major}"
+            mkdir -p "${dir}"
+            sdk=$(dotnet --list-sdks | grep "^${major}\." | tail -1 | cut -d' ' -f1)
+            echo "installing android workload for SDK ${sdk}"
+            ( cd "${dir}" \
+              && dotnet new globaljson --sdk-version "${sdk}" --force \
+              && dotnet workload install android )
+          done
+
+      - name: Set up the Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 platforms;android-35 platforms;android-36'
+
+      # Before packing, so a dependency upstream added (or an ignore entry it retired) fails
+      # fast with a named coordinate instead of surfacing as a runtime NoClassDefFoundError in a
+      # consumer. Needs the workloads above: it evaluates every project to read its declarations.
+      - name: Verify declared deps against the upstream .pom
+        run: python3 build/verify-pom-deps.py
+
+      # The build verifies every resolved artifact against the pin list, and the pin list itself
+      # is verified here: regenerate it and fail on any difference, so a pin edited by hand, a
+      # bump that skipped the script, or an upstream re-publish is a named diff in CI rather
+      # than a silent divergence. Needs the workloads above for the same reason
+      # verify-pom-deps.py does: it evaluates every project for its declarations.
+      - name: Check committed Maven checksum pins for drift
+        run: |
+          ./build/UpdateMavenChecksums.sh
+          git diff --exit-code build/maven-checksums.txt
+
+      - name: Resolve native version
+        id: native
+        run: |
+          version="${{ inputs.native-version }}"
+          if [ -z "${version}" ]; then
+            version=$(sed -n 's:.*<SfmcNativeVersion>\(.*\)</SfmcNativeVersion>.*:\1:p' Directory.Build.props | head -1)
+          fi
+          if [ -z "${version}" ]; then
+            echo "::error::could not determine the sfmcsdk native version"
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Binding sfmcsdk ${version}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cache Maven artifacts
+        uses: actions/cache@v4
+        with:
+          # @(AndroidMavenLibrary) downloads each .aar and its .pom into this cache. The native
+          # version is part of the key: without it a build for a different line would restore the
+          # previous version's artifacts and bind the wrong thing.
+          path: ~/.cache/dotnet-android/MavenCacheDirectory
+          key: sfmc-maven-${{ steps.native.outputs.version }}-${{ hashFiles('build/packages.tsv') }}
+          restore-keys: sfmc-maven-${{ steps.native.outputs.version }}-
+
+      - name: Pack all packages
+        run: ./build/BuildNugets.sh "${{ inputs.version }}" "${{ steps.native.outputs.version }}"
+
+      - name: Validate packages
+        if: ${{ inputs.verify }}
+        run: dotnet test tests/SFMCSDK.Net.Android.PackageTests --logger 'trx;LogFileName=package-tests.trx'
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: |
+            artifacts/*.nupkg
+            artifacts/*.snupkg
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload test results
+        if: ${{ inputs.verify && (always()) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-test-results
+          path: '**/*.trx'
+          if-no-files-found: ignore
+          retention-days: 7
+
+  sample:
+    name: build sample app
+    timeout-minutes: 30
+    needs: pack
+    if: ${{ inputs.verify }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The sample targets net10.0-android36.0 and so needs the .NET 10 SDK, not the .NET 9 one
+      # global.json pins. MAUI 9 cannot build against the AndroidX generation these packages
+      # depend on - see the version block in Directory.Build.props.
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install the MAUI workload for the .NET 10 band
+        run: |
+          # Workloads are installed per SDK band, and the SDK is resolved from the working
+          # directory - so this has to run from the same scratch global.json the build uses. At the
+          # repository root global.json pins .NET 9, so installing there puts maui-android on a
+          # band the build never sees, and the build fails with NETSDK1147 telling you to install a
+          # workload you just installed.
+          dir="${RUNNER_TEMP}/sample-sdk"
+          mkdir -p "${dir}"
+          ( cd "${dir}" \
+            && dotnet new globaljson \
+                 --sdk-version "$(dotnet --list-sdks | grep '^10\.' | tail -1 | cut -d' ' -f1)" --force \
+            && dotnet workload install maui-android )
+
+      - name: Set up the Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-36'
+
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-packages
+          path: artifacts
+
+      # The sample consumes the packed packages exactly as a user would, so it is the only thing
+      # that checks the API is still usable the way the README documents - including the
+      # convenience layer, which the generated binding knows nothing about and which a regenerated
+      # binding could silently break.
+      - name: Build the sample against the packed packages
+        run: |
+          # From the same scratch directory the workload was installed into, for the same reason:
+          # the SDK - and therefore the workload set - is resolved from the working directory.
+          ( cd "${RUNNER_TEMP}/sample-sdk" \
+            && dotnet build "${GITHUB_WORKSPACE}/samples/SFMCSDK.Net.Android.Example/SFMCSDK.Net.Android.Example.csproj" \
+                 --configuration Release \
+                 -p:SfmcPackageVersion="${{ inputs.version }}" )
+
+  e2e:
+    name: emulator smoke test (${{ matrix.target-framework }}${{ matrix.link-tool != '' && format(', {0}', matrix.link-tool) || '' }})
+    if: ${{ inputs.verify }}
+    timeout-minutes: 60
+    needs: pack
+    runs-on: ubuntu-latest
+    strategy:
+      # fail-fast off: when one target framework breaks it is worth knowing whether the other did
+      # too, since "net8 only" and "both" point at very different causes.
+      fail-fast: false
+      matrix:
+        target-framework: ${{ fromJSON(inputs.e2e-target-frameworks) }}
+        # Empty means "no Java shrinking", which is what the plain legs verify. The single r8
+        # leg below is added via include; one leg is enough because the keep-rules ship
+        # identically in every target framework's package, and net10 is the merged asset set.
+        link-tool: ['']
+        include:
+          # A shrunk build consumes the R8 keep-rules every package ships, so a class R8
+          # strips - a missing or stale keep - fails the module-loadability smoke check here
+          # instead of a consumer's Release build.
+          - target-framework: net10.0-android36.0
+            link-tool: r8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          # 8.0.x is here for the net8 matrix leg only - see the workload step below.
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+
+      - name: Install Android workloads
+        run: |
+          # The device app is built for the target framework under test, and the band that owns it
+          # is decided by the *API level* rather than the .NET version - the .NET 9 band has API 34
+          # reference packs but no API 34 runtime packs, so a net8 app compiles and then fails to
+          # package. See run-emulator-tests.sh. Install all three bands' workloads so any target
+          # framework in the matrix can build.
+          for sdk in 8 9 10; do
+            version="$(dotnet --list-sdks | grep "^${sdk}\." | tail -1 | cut -d' ' -f1)"
+            [ -z "${version}" ] && continue
+
+            mkdir -p "${RUNNER_TEMP}/sdk${sdk}"
+            ( cd "${RUNNER_TEMP}/sdk${sdk}" \
+              && dotnet new globaljson --sdk-version "${version}" --force \
+              && dotnet workload install android )
+          done
+
+      - name: Set up the Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 platforms;android-35 platforms;android-36'
+
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-packages
+          path: artifacts
+
+      - name: Free disk space for the emulator
+        run: |
+          # The AVD's userdata partition needs ~7.2 GB free, and this job has already installed
+          # three .NET SDK bands, three Android workloads, three platform SDKs, a system image
+          # and the packed packages. Runs have died here with
+          #
+          #     FATAL | Not enough space to create userdata partition.
+          #             Available: 5666.53 MB, need 7372.80 MB.
+          #
+          # which fails as an emulator boot timeout several minutes later, long after the real
+          # cause scrolled past. None of the following is used by this job: no native code is
+          # compiled (the .aar ships prebuilt .so files), so the NDK alone is ~5 GB of dead
+          # weight. Deliberately NOT touching /usr/share/dotnet or the rest of the Android SDK.
+          echo "before: $(df -h --output=avail / | tail -1) available"
+          sudo rm -rf /usr/local/lib/android/sdk/ndk || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /usr/local/share/powershell || true
+          sudo rm -rf /usr/local/lib/node_modules || true
+          docker image prune --all --force || true
+          echo "after:  $(df -h --output=avail / | tail -1) available"
+
+      - name: Enable KVM
+        # The x86_64 emulator is unusably slow without hardware acceleration, and the runner image
+        # does not grant access to /dev/kvm by default.
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run smoke tests on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ inputs.e2e-api-level }}
+          target: google_apis
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: ./.github/scripts/run-emulator-tests.sh "${{ inputs.version }}" "${{ matrix.target-framework }}" "${{ matrix.link-tool }}"
+
+      - name: Upload emulator logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-test-logs-${{ matrix.target-framework }}${{ matrix.link-tool != '' && format('-{0}', matrix.link-tool) || '' }}
+          path: emulator-tests.log
+          if-no-files-found: ignore
+          retention-days: 7

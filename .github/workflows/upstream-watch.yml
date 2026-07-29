@@ -1,0 +1,114 @@
+name: upstream watch
+
+# Watches Salesforce's Maven repository for movement this repository has not reacted to:
+#
+#   - an sfmcsdk release newer than the SfmcNativeVersion the package binds, read from
+#     sfmcsdk's maven-metadata.xml;
+#   - artifacts in the com/salesforce/marketingcloud listing that are neither bound in
+#     build/packages.tsv nor listed in its reasoned NOT BOUND roster - the "is X missing on
+#     purpose?" question, asked by a robot before a consumer asks it in an issue.
+#
+# The repository is Salesforce's GitHub-Pages Maven repo, which serves real HTML directory
+# listings - com.salesforce.marketingcloud is not on Maven Central at all.
+#
+# Findings become issues, idempotently: the title carries the finding, and an open issue with
+# exactly that title is not filed again. Closing one without acting mutes that finding until
+# it changes shape (a newer version, a different artifact set), which is the intent.
+
+on:
+  schedule:
+    # Weekly is plenty for a several-times-a-quarter upstream; an odd minute avoids the
+    # on-the-hour scheduling herd.
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+env:
+  SFMC_REPO: https://salesforce-marketingcloud.github.io/MarketingCloudSDK-Android/repository/com/salesforce/marketingcloud
+
+jobs:
+  watch:
+    name: compare Salesforce's repository against this one
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare versions and rosters
+        id: compare
+        run: |
+          bound=$(sed -n 's:.*<SfmcNativeVersion>\(.*\)</SfmcNativeVersion>.*:\1:p' Directory.Build.props | head -1)
+          latest=$(curl -fsSL "${SFMC_REPO}/sfmcsdk/maven-metadata.xml" \
+            | sed -n 's:.*<latest>\(.*\)</latest>.*:\1:p' | head -1)
+          if [ -z "${bound}" ] || [ -z "${latest}" ]; then
+            echo "::error::could not resolve the bound (${bound:-?}) or latest (${latest:-?}) sfmcsdk version"
+            exit 1
+          fi
+          echo "bound=${bound}"   >> "$GITHUB_OUTPUT"
+          echo "latest=${latest}" >> "$GITHUB_OUTPUT"
+
+          # The known set is greppable out of packages.tsv by design: bound artifact ids in the
+          # data rows, deliberately-unbound ones as full ids in the NOT BOUND comment block.
+          curl -fsSL "${SFMC_REPO}/" \
+            | grep -oE 'href="[a-z][^"/]*/' | sed 's/href="//; s:/$::' | LC_ALL=C sort -u > upstream.txt
+          grep -oE '[a-z][a-z0-9-]+' build/packages.tsv | LC_ALL=C sort -u > roster.txt
+          comm -23 upstream.txt roster.txt > unaccounted.txt
+
+          {
+            echo "Bound: \`${bound}\`, Salesforce repo latest: \`${latest}\`"
+            echo
+            echo "The repository lists $(wc -l < upstream.txt) artifacts; $(wc -l < unaccounted.txt) unaccounted for."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: File issues for anything new
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BOUND: ${{ steps.compare.outputs.bound }}
+          LATEST: ${{ steps.compare.outputs.latest }}
+        run: |
+          # Exact-title idempotency: search matching is fuzzy, so list open titles and compare
+          # exactly. --limit is generous; this repository does not carry hundreds of open issues.
+          file_issue() {
+            title="$1"
+            body_file="$2"
+            if gh issue list --state open --limit 200 --json title --jq '.[].title' | grep -qxF "${title}"; then
+              echo "already filed: ${title}"
+              return 0
+            fi
+            gh issue create --title "${title}" --body-file "${body_file}"
+            echo "filed: ${title}"
+          }
+
+          if [ "${LATEST}" != "${BOUND}" ]; then
+            cat > version-issue.md <<EOF
+          Salesforce's \`maven-metadata.xml\` for \`sfmcsdk\` reports \`${LATEST}\` as the latest release; this repository binds \`${BOUND}\`.
+
+          Upstream release notes: https://github.com/salesforce-marketingcloud/MarketingCloudSDK-Android/releases
+
+          The upgrade path is \`./build/BumpNativeVersion.sh ${LATEST}\` - see the README's "Upgrading the SFMC SDK" for the steps it does not automate.
+
+          *Filed automatically by the upstream-watch workflow; it will not re-file while this issue stays open.*
+          EOF
+            file_issue "sfmcsdk ${LATEST} is out (bound: ${BOUND})" version-issue.md
+          else
+            echo "version: the repository's latest (${LATEST}) is what is bound"
+          fi
+
+          if [ -s unaccounted.txt ]; then
+            names=$(paste -sd ', ' unaccounted.txt)
+            {
+              echo "Salesforce's \`com/salesforce/marketingcloud\` listing has artifacts that are neither bound in \`build/packages.tsv\` nor recorded in its NOT BOUND roster:"
+              echo
+              sed 's/^/- `/; s/$/`/' unaccounted.txt
+              echo
+              echo "Each one wants a decision: bind it (a row in \`build/packages.tsv\` plus a project under \`src/\`), hand it to the sibling MarketingCloudSDK.Net.Android repository, or add it to the roster with the reason it stays unbound."
+              echo
+              echo "*Filed automatically by the upstream-watch workflow; it will not re-file while an issue with this exact title stays open.*"
+            } > roster-issue.md
+            file_issue "New artifacts in Salesforce's Maven repository: ${names}" roster-issue.md
+          else
+            echo "roster: every upstream artifact is bound or accounted for"
+          fi

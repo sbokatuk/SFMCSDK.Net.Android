@@ -1,0 +1,41 @@
+# The package set, and the single source of truth for it.
+#
+# BuildNugets.sh packs in this order, the release and PR workflows generate their package tables
+# from it, and run-emulator-tests.sh clears the local NuGet cache for every id listed here. Adding
+# a package means adding a row here and a project under src/ - nothing else has a second copy of
+# the list to fall out of step with.
+#
+# Rows are in dependency order: a package's in-repo deps must already have appeared above it.
+#
+# package-id	maven-artifact-id	deps (this repo's package ids, or -)
+SFMCSDK.Net.Android	sfmcsdk	-
+
+# ----------------------------------------------------------------------------------------------
+# NOT BOUND, and why.
+#
+# Salesforce publishes these under com.salesforce.marketingcloud on its GitHub-Pages Maven
+# repository (counted 2026-07 against the repository index). This section exists so "is X missing
+# on purpose?" has an answer here rather than in someone's memory - and it doubles as the
+# machine-read roster: the upstream-watch workflow reconciles the repository index against every
+# artifact id named in this file and opens an issue when Salesforce grows an artifact that is
+# neither bound above nor listed below. Keep every entry a FULL artifact id for that reason.
+#
+#   common-internal              Shipped INSIDE SFMCSDK.Net.Android as an unbound .aar - it is
+#                                the sfmcsdk .pom's one Salesforce-internal dependency and has no
+#                                public API worth a projection. Not missing; deliberately not a
+#                                package of its own.
+#
+#   marketingcloudsdk            The MobilePush module family. Bound by the sibling repository,
+#   pushfeaturemodule            MarketingCloudSDK.Net.Android, which depends on this package for
+#   pushmodelsmodule             the core - mirroring how the native umbrella depends on sfmcsdk.
+#   inappmessagingfeaturemodule
+#   inappmessagingmodelsmodule
+#   common
+#   legacy-crypto
+#
+#   mobileappmessaging           Mobile App Messaging (MAM) - a separate, optional Salesforce
+#   mobileappmessagingsdk        product on its own version line, not a dependency of either
+#                                bound family. A binding candidate once a consumer asks.
+#
+#   core                         2021-era leftovers of the pre-Unified architecture, last
+#   version-safety-plugin        published years before this repository existed. Dead upstream.

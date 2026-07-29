@@ -1,0 +1,20 @@
+# What the upstream-drift workflow watches, and the single source of truth for it.
+#
+# build/check-upstream.sh reads this; it knows how to query each ecosystem but nothing about which
+# components this repository binds. Adding a native SDK means adding a row here.
+#
+# Columns are single-tab-separated.
+#   group    reporting group - one GitHub issue per group, titled with this text
+#   label    how the component is named inside the issue
+#   kind     cocoapods | maven | github-release | github-tag
+#   pin      the MSBuild property in Directory.Build.props holding the pinned version
+#   locator  kind-specific: pod name, groupId:artifactId[:packaging][@repo], or owner/repo
+#   confirm  download URL template with {version}, or "-" to derive it from the locator
+#
+# sfmcsdk is the artifact this repository binds. common-internal rides inside the same package
+# but versions independently, so it gets its own row - a drift there is a repack of this package
+# even when sfmcsdk itself has not moved.
+#
+# group	label	kind	pin	locator	confirm
+SFMC SDK Android	sfmcsdk	maven	SfmcNativeVersion	com.salesforce.marketingcloud:sfmcsdk:aar@https://salesforce-marketingcloud.github.io/MarketingCloudSDK-Android/repository	-
+SFMC SDK Android	common-internal	maven	SfmcCommonInternalVersion	com.salesforce.marketingcloud:common-internal:aar@https://salesforce-marketingcloud.github.io/MarketingCloudSDK-Android/repository	-

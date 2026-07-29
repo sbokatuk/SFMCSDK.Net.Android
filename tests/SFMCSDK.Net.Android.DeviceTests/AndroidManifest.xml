@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!--
+    INTERNET is what lets the SDK attempt its own network work during initialization. The dummy
+    configuration points at no real tenant, so everything fails server-side - which is the
+    isolation these checks want - but without the permission the SDK reports a different failure
+    and the run would prove less than it looks.
+  -->
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <application android:label="SFMCSDK.Net e2e" android:usesCleartextTraffic="true" />
+</manifest>

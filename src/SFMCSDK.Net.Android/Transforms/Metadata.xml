@@ -1,0 +1,17 @@
+<metadata>
+  <!--
+    Rules are the exceptions, not the norm: the generator handles the rest of the surface
+    unaided. Every rule states what breaks without it, so an upgrade can re-check whether the
+    upstream shape that motivated it still exists - an XPath that stops matching is silent.
+  -->
+
+  <!--
+    Response.Creator is a Kotlin companion-object CREATOR for Android's Parcelable plumbing whose
+    generic signature defeats the generator: the emitted C# for the nested creator fails to
+    compile against the projected Response type. Nothing user-facing is lost - Parcelable
+    creators are called by the OS through reflection, never from C#. Carried over from the
+    pre-rebuild sfmc-net-bindings-mobile repository, where it was needed for sfmcsdk 1.x; still
+    present in 3.1.1.
+  -->
+  <remove-node path="/api/package[@name='com.salesforce.marketingcloud.sfmcsdk.components.http']/class[@name='Response.Creator']" />
+</metadata>

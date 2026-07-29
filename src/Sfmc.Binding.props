@@ -1,0 +1,370 @@
+<!--
+  Everything the binding project(s) in this repository have in common.
+
+  Imported explicitly by each .csproj rather than picked up as a Directory.Build.props, because it
+  reads properties the project sets - SfmcArtifact and SfmcPackageId - and Directory.Build.props
+  is imported before the project body, so it would see neither. That leaves each binding project
+  as its identity, its description, and its dependencies.
+
+  The shape of this file is shared with the sibling MarketingCloudSDK.Net.Android repository, so
+  that a fix in one is a one-file port to the other.
+-->
+<Project>
+
+  <PropertyGroup>
+    <!--
+      Each .NET SDK's Android workload ships reference packs for exactly two target frameworks:
+      the .NET 9 band covers net8.0-android + net9.0-android, the .NET 10 band covers
+      net9.0-android + net10.0-android. No single SDK can build all three, so BuildNugets.sh packs
+      twice and merges the results - see build/merge-packages.py. SfmcSdkBand selects which pass
+      this build is.
+
+      The API level is pinned per target framework rather than left to the workload's default,
+      because it ends up in the lib/<tfm>/ folder name inside the package. A bare 'net8.0-android'
+      resolves to whatever the installed workload currently defaults to, so a workload update
+      would change the packages' advertised target frameworks without a single source edit.
+    -->
+    <SfmcSdkBand Condition=" '$(SfmcSdkBand)' == '' ">net9</SfmcSdkBand>
+    <TargetFrameworks Condition=" '$(SfmcSdkBand)' == 'net9' ">net8.0-android34.0;net9.0-android35.0</TargetFrameworks>
+    <TargetFrameworks Condition=" '$(SfmcSdkBand)' == 'net10' ">net10.0-android36.0</TargetFrameworks>
+    <!--
+      net8.0-android is past end of support, which the SDK reports as an error. It ships
+      deliberately: .NET 8 is still where a large share of MAUI apps are, and stranding them would
+      defeat the point of publishing bindings at all.
+    -->
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <CheckEolWorkloads>false</CheckEolWorkloads>
+
+    <!--
+      The SFMC SDK raised its floor to API 26 (Android 8.0) in the v10/MCET_258.0 generation -
+      "The minimum compatible Android API version is 26" in the official change log. A package
+      claiming less would be claiming support for OS versions its own .aar refuses to run on.
+    -->
+    <SupportedOSPlatformVersion>26</SupportedOSPlatformVersion>
+
+    <!--
+      class-parse reads the .aar's class files directly rather than running javadoc over sources,
+      which is the only option that works against a binary-only Maven artifact. XAJavaInterop1 is
+      the modern codegen target; the legacy XamarinAndroid one is not supported for new bindings.
+    -->
+    <AndroidClassParser>class-parse</AndroidClassParser>
+    <AndroidCodegenTarget>XAJavaInterop1</AndroidCodegenTarget>
+
+    <!--
+      The namespace follows the Java package the module actually declares, projected by the
+      generator - com.salesforce.marketingcloud.sfmcsdk becomes
+      Com.Salesforce.Marketingcloud.Sfmcsdk. Left at the default rather than flattened, so that a
+      type's C# name can always be derived from its Kotlin one without a lookup table - and so
+      that code written against the old sfmc-net-bindings-mobile packages keeps compiling.
+    -->
+    <AssemblyName>$(SfmcPackageId)</AssemblyName>
+    <!--
+      Deliberately NOT the default, which is the project name. .NET Android emits a Resource
+      designer class into $(RootNamespace), so a default of SFMCSDK.Net.Android would bring the
+      namespace SFMCSDK.Net into existence - and C# resolves a bare `Net` outward through
+      enclosing namespaces, so any consumer under an SFMCSDK.* namespace could have `Net.*`
+      references silently rebind. The .Bindings segment keeps the designer out of everyone's way.
+    -->
+    <RootNamespace>$(SfmcPackageId).Bindings</RootNamespace>
+
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!--
+      CS1591: the generated binding is at best partially documented - Salesforce publishes no
+      -sources.jar for these artifacts at all, so there is no KDoc/Javadoc to import and most of
+      the surface has no XML docs.
+      BG8604/BG8605: Kotlin emits synthetic $default bridge methods for every function with
+      default parameter values, and the SFMC SDK's Kotlin API uses them; the generator reports the
+      ones it cannot name, while the real overloads are bound and are what consumers call.
+    -->
+    <NoWarn>$(NoWarn);CS1591;BG8604;BG8605</NoWarn>
+  </PropertyGroup>
+
+  <Target Name="ValidateSfmcSdkBand" BeforeTargets="Build;Pack" Condition=" '$(TargetFrameworks)' == '' ">
+    <Error Text="SfmcSdkBand must be 'net9' or 'net10', but was '$(SfmcSdkBand)'." />
+  </Target>
+
+  <!--
+    The native artifact, resolved straight from Salesforce's Maven repository along with its
+    .pom. Nothing is committed to this repository and there is no fetch script:
+    @(AndroidMavenLibrary) downloads into ~/.cache/dotnet-android/MavenCacheDirectory, which CI
+    restores from actions/cache.
+
+    The repository is Salesforce's own GitHub-Pages Maven repo. com.salesforce.marketingcloud is
+    NOT on Maven Central (repo1.maven.org 404s for the whole group), so every row carries the
+    repository URL - which @(AndroidMavenLibrary) accepts as Repository= metadata verbatim.
+
+    This also feeds the SDK's Java dependency verification - the check that fails the build when
+    the .aar links against Java types no referenced package provides. That check is the whole
+    reason to prefer this over committing .aar files: it turns a runtime NoClassDefFoundError
+    into a build error.
+  -->
+  <!--
+    SfmcBindArtifact=false ships the .aar without generating a C# binding for it. The classes are
+    still dexed into the consuming app, which is the point: a module whose types nobody calls
+    from C# still has to be present for the modules that do call them from Kotlin.
+  -->
+  <PropertyGroup>
+    <SfmcMavenRepository>https://salesforce-marketingcloud.github.io/MarketingCloudSDK-Android/repository</SfmcMavenRepository>
+    <SfmcBindArtifact Condition=" '$(SfmcBindArtifact)' == '' ">true</SfmcBindArtifact>
+
+    <!--
+      @(AndroidMavenLibrary) arrived in the .NET Android SDK 35. The net8.0-android34.0 reference
+      pack has no Xamarin.Android.Bindings.Maven.targets at all, so the item is not merely
+      unsupported there - it is unknown, and MSBuild ignores unknown items in silence.
+
+      The failure that causes is the worst kind: the build succeeds, the package is produced, and
+      the binding assembly inside it is an empty 5 KB shell with no .aar and no types. It is
+      caught here by resolving artifacts a second way on net8, and in the package tests by
+      asserting every binding assembly is large enough to contain a real binding.
+
+      net8 therefore gets no Java dependency verification. That is acceptable because net9 and
+      net10 bind exactly the same artifacts and do verify them, so a missing Java dependency
+      still fails the build - just in the other two passes.
+
+      Compared literally rather than with TargetFramework.StartsWith: during the outer
+      cross-targeting build $(TargetFramework) is empty, and a property function on it aborts
+      evaluation of this file.
+    -->
+    <SfmcSupportsMavenLibrary>true</SfmcSupportsMavenLibrary>
+    <SfmcSupportsMavenLibrary Condition=" '$(TargetFramework)' == 'net8.0-android34.0' ">false</SfmcSupportsMavenLibrary>
+  </PropertyGroup>
+
+  <!--
+    Every Maven artifact this project needs, declared once and resolved either way. Projects add
+    rows for additional artifacts (payload-only module .aars, third-party Java libraries with no
+    .NET binding).
+
+    Defaults for every @(SfmcMavenArtifact), wherever it is declared. An ItemDefinitionGroup is
+    what makes the metadata unconditionally present: referencing %(Repository) on a list where
+    even one row omits it is MSB4096.
+  -->
+  <ItemDefinitionGroup>
+    <SfmcMavenArtifact>
+      <Repository>$(SfmcMavenRepository)</Repository>
+      <Packaging>aar</Packaging>
+      <Bind>false</Bind>
+    </SfmcMavenArtifact>
+  </ItemDefinitionGroup>
+
+  <ItemGroup>
+    <SfmcMavenArtifact Include="com.salesforce.marketingcloud:$(SfmcArtifact)"
+                       Version="$(SfmcArtifactVersion)"
+                       Bind="$(SfmcBindArtifact)"
+                       Packaging="aar" />
+  </ItemGroup>
+
+  <!--
+    Projected in a target, not in an ItemGroup here. This file is imported from the middle of
+    each .csproj, and MSBuild evaluates a project top to bottom - so an ItemGroup at this point
+    would see only the artifacts declared above the Import and silently miss rows the project
+    adds below it. Running after evaluation means the whole @(SfmcMavenArtifact) list is present
+    regardless of where a project declares its rows.
+  -->
+  <Target Name="ProjectSfmcMavenArtifacts"
+          Condition=" '$(SfmcSupportsMavenLibrary)' == 'true' "
+          BeforeTargets="_MavenRestore;_VerifyJavaDependencies;_CategorizeAndroidLibraries">
+    <ItemGroup>
+      <AndroidMavenLibrary Include="@(SfmcMavenArtifact)" />
+    </ItemGroup>
+  </Target>
+
+  <!--
+    The download path, for the net8 band. Both the downloads and the @(AndroidLibrary) items live
+    inside the target, and paths are made absolute there: $(IntermediateOutputPath) is not final
+    while this file is being evaluated, and an item declared at evaluation time captures a path
+    that is not where the file ends up - surfacing much later as ExtractJarsFromAar reporting the
+    .aar "is probably corrupt".
+
+    A Repository value that is a URL is used verbatim; 'Central' and 'Google' map to the public
+    mirrors, so third-party rows do not need to spell them out.
+  -->
+  <Target Name="DownloadSfmcMavenArtifacts"
+          Condition=" '$(SfmcSupportsMavenLibrary)' != 'true' "
+          BeforeTargets="_MavenRestore;_CategorizeAndroidLibraries">
+    <PropertyGroup>
+      <_SfmcArtifactDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)/$(IntermediateOutputPath)'))maven</_SfmcArtifactDirectory>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <_SfmcResolved Include="@(SfmcMavenArtifact)">
+        <Group>$([System.Text.RegularExpressions.Regex]::Replace('%(Identity)', ':.*$', ''))</Group>
+        <ArtifactId>$([System.Text.RegularExpressions.Regex]::Replace('%(Identity)', '^.*:', ''))</ArtifactId>
+      </_SfmcResolved>
+      <_SfmcResolved>
+        <GroupPath>$([System.String]::Copy('%(Group)').Replace('.', '/'))</GroupPath>
+        <BaseUrl Condition=" '%(Repository)' == 'Google' ">https://dl.google.com/dl/android/maven2</BaseUrl>
+        <BaseUrl Condition=" '%(Repository)' == 'Central' ">https://repo1.maven.org/maven2</BaseUrl>
+        <BaseUrl Condition=" $([System.String]::Copy('%(Repository)').StartsWith('http')) ">%(Repository)</BaseUrl>
+      </_SfmcResolved>
+      <_SfmcResolved>
+        <MavenFileName>%(ArtifactId)-%(Version).%(Packaging)</MavenFileName>
+      </_SfmcResolved>
+    </ItemGroup>
+
+    <Error Condition=" '@(_SfmcResolved->WithMetadataValue('BaseUrl', ''))' != '' "
+           Text="Unrecognised Repository for @(_SfmcResolved->WithMetadataValue('BaseUrl', '')): use 'Central', 'Google' or a repository URL." />
+
+    <MakeDir Directories="$(_SfmcArtifactDirectory)" />
+
+    <DownloadFile
+        SourceUrl="%(_SfmcResolved.BaseUrl)/%(_SfmcResolved.GroupPath)/%(_SfmcResolved.ArtifactId)/%(_SfmcResolved.Version)/%(_SfmcResolved.MavenFileName)"
+        DestinationFolder="$(_SfmcArtifactDirectory)"
+        SkipUnchangedFiles="true"
+        Retries="3" />
+
+    <ItemGroup>
+      <AndroidLibrary Include="$(_SfmcArtifactDirectory)/%(_SfmcResolved.MavenFileName)"
+                      Bind="%(_SfmcResolved.Bind)" />
+    </ItemGroup>
+  </Target>
+
+  <!--
+    Kotlin's stdlib is a runtime dependency of every SFMC module, so it is declared here rather
+    than per project.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Xamarin.Kotlin.StdLib" Version="$(KotlinStdLibVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <TransformFile Include="Transforms/Metadata.xml" Condition="Exists('$(MSBuildProjectDirectory)/Transforms/Metadata.xml')" />
+    <TransformFile Include="Transforms/EnumFields.xml" Condition="Exists('$(MSBuildProjectDirectory)/Transforms/EnumFields.xml')" />
+    <TransformFile Include="Transforms/EnumMethods.xml" Condition="Exists('$(MSBuildProjectDirectory)/Transforms/EnumMethods.xml')" />
+  </ItemGroup>
+
+  <!-- Packaging -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>$(SfmcPackageId)</PackageId>
+    <Title>.NET for Android bindings for the native $(SfmcArtifact) module of the Salesforce Marketing Cloud SDK.</Title>
+    <PackageTags>$(PackageTags);salesforce;marketingcloud;sfmc;mobilepush;SDK;MAUI;Android;dotnet-android;Binding</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)../build/icon.png" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)../README.md" Pack="true" PackagePath="/" Visible="false" />
+    <!--
+      Both licence texts the package is covered by: MIT for the binding code in this repository,
+      BSD-3-Clause for the native artifacts built by Salesforce. Packed into a folder so each
+      file keeps its own name; naming the target explicitly would make NuGet treat the
+      extensionless LICENSE as a directory.
+    -->
+    <None Include="$(MSBuildThisFileDirectory)../LICENSE" Pack="true" PackagePath="licenses/" Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)../licenses/BSD-3-Clause-Salesforce.txt" Pack="true" PackagePath="licenses/" Visible="false" />
+  </ItemGroup>
+
+  <!--
+    Consumer R8/ProGuard keep-rules. Packed under buildTransitive/ so NuGet imports the .targets
+    into every consuming project - transitive consumers included, which build/ would not reach;
+    the rules themselves attach only where R8 runs (see the .targets). The .pro files are
+    generated by build/generate-r8-rules.sh and CI regenerates them and fails on drift.
+
+    Declared here rather than in each .csproj so a package cannot opt out by forgetting the
+    block - and deliberately without an Exists() condition, so a new package whose rules were
+    never generated fails its pack (NU5019) instead of quietly shipping without them.
+  -->
+  <ItemGroup>
+    <None Include="$(MSBuildProjectDirectory)/buildTransitive/$(PackageId).targets" Pack="true" PackagePath="buildTransitive" />
+    <None Include="$(MSBuildProjectDirectory)/buildTransitive/$(PackageId).pro" Pack="true" PackagePath="buildTransitive" />
+  </ItemGroup>
+
+  <!--
+    Supply-chain pin for every Maven artifact, on both resolution paths. Java dependency
+    verification (above) checks *completeness* - that every linked Java type is provided by some
+    referenced package. It says nothing about *authenticity*: whether the bytes resolved from
+    Salesforce's repository are the bytes that were reviewed when the version was pinned. This
+    target closes that half, against build/maven-checksums.txt - regenerated by
+    build/UpdateMavenChecksums.sh on upgrade, so a hash that changes for an unchanged version
+    fails the build instead of shipping.
+
+    It verifies the files the build actually resolved - @(AndroidLibrary) after restore covers
+    both the @(AndroidMavenLibrary) cache path and the direct-download fallback - so no cache
+    layout is guessed at. Only files whose names appear in the pin list are checked; the .aars
+    that arrive inside NuGet packages are those packages' responsibility.
+
+    SfmcVerifyMavenChecksums=false skips it, for experiments against unreleased artifacts.
+
+    Scheduling: BeforeTargets="_CategorizeAndroidLibraries" gets this into the build on both
+    resolution paths; DependsOnTargets orders it after whichever producer this target framework
+    uses. It cannot name _MavenRestore unconditionally - the .NET 8 band's Android SDK predates
+    @(AndroidMavenLibrary) entirely, so the target does not exist there and naming it is MSB4057.
+  -->
+  <PropertyGroup>
+    <_SfmcVerifyDependsOn Condition=" '$(SfmcSupportsMavenLibrary)' == 'true' ">_MavenRestore</_SfmcVerifyDependsOn>
+    <_SfmcVerifyDependsOn Condition=" '$(SfmcSupportsMavenLibrary)' != 'true' ">DownloadSfmcMavenArtifacts</_SfmcVerifyDependsOn>
+  </PropertyGroup>
+
+  <Target Name="VerifySfmcMavenArtifactHashes"
+          BeforeTargets="_CategorizeAndroidLibraries"
+          DependsOnTargets="$(_SfmcVerifyDependsOn)"
+          Condition=" '$(SfmcVerifyMavenChecksums)' != 'false' and '$(DesignTimeBuild)' != 'true' ">
+    <PropertyGroup>
+      <_SfmcChecksumFile>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)../build/maven-checksums.txt'))</_SfmcChecksumFile>
+    </PropertyGroup>
+
+    <Error Condition=" !Exists('$(_SfmcChecksumFile)') "
+           Text="$(_SfmcChecksumFile) is missing. Run build/UpdateMavenChecksums.sh, or set SfmcVerifyMavenChecksums=false to skip verification." />
+
+    <ReadLinesFromFile File="$(_SfmcChecksumFile)">
+      <Output TaskParameter="Lines" ItemName="_SfmcChecksumLine" />
+    </ReadLinesFromFile>
+
+    <!--
+      Identity-set algebra - transforms, Include and Exclude - deliberately. Filtering one item
+      list by another's *metadata* inside a target needs task batching, which silently does not
+      apply to an ItemGroup condition written the intuitive way; matching on item identity has no
+      such trap.
+    -->
+    <ItemGroup>
+      <_SfmcPin Include="@(_SfmcChecksumLine)"
+                Condition=" '%(Identity)' != '' and !$([System.String]::Copy('%(Identity)').StartsWith('#')) ">
+        <PinFile>$([System.Text.RegularExpressions.Regex]::Replace('%(Identity)', '\s.*$', ''))</PinFile>
+        <Sha256>$([System.Text.RegularExpressions.Regex]::Replace('%(Identity)', '^\S+\s+', ''))</Sha256>
+      </_SfmcPin>
+      <_SfmcPinName Include="@(_SfmcPin->'%(PinFile)')" />
+    </ItemGroup>
+
+    <!--
+      Completeness before authenticity: every declared @(SfmcMavenArtifact) must have its
+      deterministic file name, %(ArtifactId)-%(Version).%(Packaging), in the pin list before
+      anything is hashed - otherwise an artifact whose pin was never generated would sail past
+      the checks looking like one of the not-pinned NuGet-delivered .aars.
+    -->
+    <ItemGroup>
+      <_SfmcDeclaredArtifact Include="@(SfmcMavenArtifact)">
+        <ArtifactId>$([System.Text.RegularExpressions.Regex]::Replace('%(Identity)', '^.*:', ''))</ArtifactId>
+      </_SfmcDeclaredArtifact>
+      <_SfmcExpectedPinName Include="@(_SfmcDeclaredArtifact->'%(ArtifactId)-%(Version).%(Packaging)')" />
+      <_SfmcMissingPin Include="@(_SfmcExpectedPinName)" Exclude="@(_SfmcPinName)" />
+    </ItemGroup>
+
+    <Error Condition=" '@(_SfmcMissingPin)' != '' "
+           Text="Declared Maven artifact(s) have no SHA-256 pin in build/maven-checksums.txt: @(_SfmcMissingPin->'%(Identity)', '; '). Run build/UpdateMavenChecksums.sh and review the diff." />
+
+    <GetFileHash Files="@(AndroidLibrary->'%(FullPath)')" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Items" ItemName="_SfmcHashedFile" />
+    </GetFileHash>
+
+    <ItemGroup>
+      <_SfmcDisk Include="@(_SfmcHashedFile->'%(Filename)%(Extension)')" />
+      <_SfmcNotPinned Include="@(_SfmcDisk)" Exclude="@(_SfmcPinName)" />
+      <_SfmcChecked Include="@(_SfmcDisk)" Exclude="@(_SfmcNotPinned)" />
+
+      <_SfmcCheckedKey Include="@(_SfmcChecked->'%(Identity)|%(FileHash)')" />
+      <_SfmcExpectedKey Include="@(_SfmcPinName->'%(Identity)|%(Sha256)')" />
+      <_SfmcMismatch Include="@(_SfmcCheckedKey)" Exclude="@(_SfmcExpectedKey)" />
+    </ItemGroup>
+
+    <Error Condition=" '@(_SfmcChecked)' == '' "
+           Text="No resolved Maven artifact matched any pinned name in build/maven-checksums.txt - the pin list is stale for $(SfmcArtifact) $(SfmcArtifactVersion). Run build/UpdateMavenChecksums.sh and review the diff." />
+
+    <Error Condition=" '@(_SfmcMismatch)' != '' "
+           Text="Maven artifact SHA-256 mismatch: @(_SfmcMismatch->'%(Identity)', '; '). The bytes on disk do not match build/maven-checksums.txt - a corrupted or tampered download, or a stale pin after an upgrade. Investigate before regenerating the pins." />
+
+    <Message Importance="normal"
+             Text="Verified @(_SfmcChecked->Distinct()->Count()) Maven artifact hash(es) against build/maven-checksums.txt." />
+  </Target>
+
+</Project>

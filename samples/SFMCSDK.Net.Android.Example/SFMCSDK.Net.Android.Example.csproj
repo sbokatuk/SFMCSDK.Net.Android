@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFrameworks>net10.0-android36.0</TargetFrameworks>
+
+		<OutputType>Exe</OutputType>
+		<RootNamespace>SFMCSDK.Net.Android.Example</RootNamespace>
+		<UseMaui>true</UseMaui>
+		<SingleProject>true</SingleProject>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+
+		<ApplicationTitle>SFMCSDK.Net.Android.Example</ApplicationTitle>
+		<ApplicationId>com.sbokatuk.sfmcsdknet.example</ApplicationId>
+		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+		<ApplicationVersion>1</ApplicationVersion>
+
+		<WindowsPackageType>None</WindowsPackageType>
+		<!-- The SFMC SDK's own floor; see Sfmc.Binding.props. -->
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">26.0</SupportedOSPlatformVersion>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- App Icon -->
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#512BD4" />
+
+		<!-- Splash Screen -->
+		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#512BD4" BaseSize="128,128" />
+
+		<!-- Images -->
+		<MauiImage Include="Resources\Images\*" />
+		<MauiImage Update="Resources\Images\dotnet_bot.png" Resize="True" BaseSize="300,185" />
+
+		<!-- Custom Fonts -->
+		<MauiFont Include="Resources\Fonts\*" />
+
+		<!-- Raw Assets (also remove the "Resources\Raw" prefix) -->
+		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.2" />
+	</ItemGroup>
+
+	<!--
+	  Resolved from ./artifacts through the local feed in the repository's NuGet.config, not from
+	  nuget.org, so the sample always exercises your local build. Run ./build/BuildNugets.sh first.
+	  Pass -p:SfmcPackageVersion=3.1.1.2-rc.1 to point it at a specific build.
+
+	  net10, not net9: MAUI 9 cannot build against the AndroidX generation the SFMC SDK's
+	  dependencies resolve to - a known .NET Android SDK defect generating Java callable wrappers -
+	  while MAUI 10 handles it natively. The package itself still targets net8, net9 and net10;
+	  this is a constraint on the MAUI version this sample builds with, not on what consumers ship.
+	  Building this needs the .NET 10 SDK, which the repository's global.json does not select - see
+	  the command in the README.
+	-->
+	<PropertyGroup>
+		<SfmcPackageVersion Condition=" '$(SfmcPackageVersion)' == '' ">$(VersionPrefix)</SfmcPackageVersion>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="SFMCSDK.Net.Android" Version="$(SfmcPackageVersion)" />
+	</ItemGroup>
+
+</Project>
