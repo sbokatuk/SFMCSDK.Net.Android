@@ -139,21 +139,48 @@ public static class Packages
 
     public static ZipArchive OpenPackage(string id, string extension = ".nupkg")
     {
-        var matches = Directory.GetFiles(ArtifactsDirectory, $"{id}.*{extension}");
+        // An explicit version wins where the caller knows it. Otherwise the version is discovered:
+        // pull-request runs pack a -beta.<pr>.<run> version that no file in the repository knows, so
+        // matching against Directory.Build.props would fail every beta validation.
+        if (Environment.GetEnvironmentVariable("SFMC_PACKAGE_VERSION") is { Length: > 0 } pinned)
+        {
+            var named = Path.Combine(ArtifactsDirectory, $"{id}.{pinned}{extension}");
+
+            return File.Exists(named)
+                ? ZipFile.OpenRead(named)
+                : throw new FileNotFoundException(
+                    $"'{named}' does not exist (SFMC_PACKAGE_VERSION={pinned}). Run ./build/BuildNugets.sh first.",
+                    named);
+        }
 
         // Matching on the id prefix alone would also match a longer id that starts with it, so
         // the next character after the id must look like the start of a version.
-        var package = matches.SingleOrDefault(path =>
-            Path.GetFileName(path).StartsWith($"{id}.", StringComparison.Ordinal) &&
-            char.IsDigit(Path.GetFileName(path)[id.Length + 1]));
+        var matches = Directory.GetFiles(ArtifactsDirectory, $"{id}.*{extension}")
+            .Where(path =>
+                Path.GetFileName(path).StartsWith($"{id}.", StringComparison.Ordinal) &&
+                char.IsDigit(Path.GetFileName(path)[id.Length + 1]))
+            .ToArray();
 
-        if (package is null)
+        if (matches.Length == 0)
         {
             throw new FileNotFoundException(
                 $"No {id}{extension} in {ArtifactsDirectory}. Run ./build/BuildNugets.sh first.");
         }
 
-        return ZipFile.OpenRead(package);
+        // artifacts/ is scratch that accumulates across revisions. This used to be SingleOrDefault,
+        // which threw "Sequence contains more than one matching element" from inside LINQ - a message
+        // that says nothing about packages and sends the reader into this helper.
+        if (matches.Length > 1)
+        {
+            throw new InvalidOperationException(
+                $"{ArtifactsDirectory} holds {matches.Length} versions of {id}{extension}: "
+                + string.Join(", ", matches.Select(Path.GetFileName).Order())
+                + ". Which one the suite should validate is ambiguous - delete the stale ones "
+                + "(rm -f artifacts/*.nupkg artifacts/*.snupkg && ./build/BuildNugets.sh) or set "
+                + "SFMC_PACKAGE_VERSION to the one you mean.");
+        }
+
+        return ZipFile.OpenRead(matches[0]);
     }
 
     /// <summary>Reads an entry into a seekable stream, so it can be opened as an archive.</summary>
