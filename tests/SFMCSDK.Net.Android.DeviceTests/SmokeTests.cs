@@ -15,7 +15,7 @@ public static class SmokeTests
     /// <summary>Where progress lines go; MainActivity points this at logcat.</summary>
     public static Action<string> Reporter { get; set; } = _ => { };
 
-    private static readonly TaskCompletionSource<InitializationStatus> Initialized =
+    private static readonly TaskCompletionSource<IInitializationStatus> Initialized =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public static readonly SmokeTest[] All =
@@ -26,8 +26,16 @@ public static class SmokeTests
             // ClassNotFoundException rather than three checks later with something baffling.
             // PermissionUtils is the marker for common-internal, which ships in this package
             // unbound - the class must still be dexed into the app.
-            Java.Lang.Class.ForName("com.salesforce.marketingcloud.sfmcsdk.SFMCSdk");
-            Java.Lang.Class.ForName("com.salesforce.marketingcloud.internal.util.PermissionUtils");
+            //
+            // The loader is passed explicitly: Class.forName(String) resolves against the caller's
+            // loader, and a call made from managed code has no Java frame to take one from, so
+            // Android falls back to the boot class loader - which never sees the app's dex and
+            // fails every lookup with "Class not found using the boot class loader".
+            var loader = global::Android.App.Application.Context.ClassLoader
+                ?? throw new InvalidOperationException("The application context has no class loader.");
+
+            Java.Lang.Class.ForName("com.salesforce.marketingcloud.sfmcsdk.SFMCSdk", false, loader);
+            Java.Lang.Class.ForName("com.salesforce.marketingcloud.internal.util.PermissionUtils", false, loader);
             return Task.CompletedTask;
         }),
 

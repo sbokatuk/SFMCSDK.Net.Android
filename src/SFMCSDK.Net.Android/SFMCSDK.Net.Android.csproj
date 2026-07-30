@@ -33,6 +33,13 @@
                       Condition=" '$(TargetFramework)' != 'net8.0-android34.0' " />
     <PackageReference Include="Xamarin.AndroidX.Lifecycle.Process" Version="$(AndroidXLifecycleProcessVersionNet8)"
                       Condition=" '$(TargetFramework)' == 'net8.0-android34.0' " />
+    <!--
+      Work.Runtime 2.11.0 and GooglePlayServices.Basement 118.9.0 pull conflicting transitive
+      bounds on Lifecycle.Common on net8. A direct reference at 2.9.4 overrides the conflict.
+      See Directory.Build.props for the full explanation.
+    -->
+    <PackageReference Include="Xamarin.AndroidX.Lifecycle.Common" Version="$(AndroidXLifecycleCommonVersionNet8)"
+                      Condition=" '$(TargetFramework)' == 'net8.0-android34.0' " />
     <PackageReference Include="Xamarin.AndroidX.Annotation" Version="$(AndroidXAnnotationVersion)" />
     <PackageReference Include="Xamarin.GooglePlayServices.Basement" Version="$(GooglePlayServicesBasementVersion)" />
     <PackageReference Include="Xamarin.AndroidX.Work.Runtime" Version="$(AndroidXWorkRuntimeVersion)" />

@@ -48,6 +48,15 @@
       dependency verification actually runs - carry the .pom-exact version.
     -->
     <AndroidXLifecycleProcessVersionNet8>2.9.4</AndroidXLifecycleProcessVersionNet8>
+    <!--
+      On net8, Work.Runtime 2.11.0 and GooglePlayServices.Basement 118.9.0 each pull a transitive
+      dependency on Lifecycle.Common, but through chains that land on incompatible upper bounds:
+      Work.Runtime -> Lifecycle.Service 2.9.4 -> Lifecycle.Runtime 2.9.4 -> Lifecycle.Common
+      (>= 2.9.4 && < 2.9.5), while Basement -> Fragment 1.8.9 -> ViewModelSavedState 2.9.2.1 ->
+      Lifecycle.Common (>= 2.9.2.1 && < 2.9.3). A direct reference overrides the conflict.
+      net9/net10 resolve a later Fragment that widens the constraint and never sees NU1107.
+    -->
+    <AndroidXLifecycleCommonVersionNet8>2.9.4</AndroidXLifecycleCommonVersionNet8>
     <AndroidXAnnotationVersion>1.9.1.5</AndroidXAnnotationVersion>
     <GooglePlayServicesBasementVersion>118.9.0</GooglePlayServicesBasementVersion>
     <AndroidXWorkRuntimeVersion>2.11.0</AndroidXWorkRuntimeVersion>

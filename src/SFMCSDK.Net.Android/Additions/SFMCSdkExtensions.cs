@@ -12,14 +12,19 @@ namespace Com.Salesforce.Marketingcloud.Sfmcsdk
 	/// </summary>
 	public sealed class InitializationCallback : Java.Lang.Object, Kotlin.Jvm.Functions.IFunction1
 	{
-		private readonly Action<InitializationStatus> onComplete;
+		private readonly Action<IInitializationStatus> onComplete;
 
-		public InitializationCallback(Action<InitializationStatus> onComplete)
+		public InitializationCallback(Action<IInitializationStatus> onComplete)
 			=> this.onComplete = onComplete ?? throw new ArgumentNullException(nameof(onComplete));
 
 		public Java.Lang.Object Invoke(Java.Lang.Object p0)
 		{
-			onComplete(p0.JavaCast<InitializationStatus>());
+			// The interface, not the same-named class: upstream's InitializationStatus is a Java
+			// interface, so the generator emits IInitializationStatus (with an Invoker) plus an
+			// obsolete class of the same name that only carries the constants and has no Invoker.
+			// Casting to the class form throws "Unable to find Invoker for type ..." on the SDK's
+			// callback thread, which is fatal - it is a Java-called thread.
+			onComplete(p0.JavaCast<IInitializationStatus>());
 			return Kotlin.Unit.Instance;
 		}
 	}
@@ -45,7 +50,7 @@ namespace Com.Salesforce.Marketingcloud.Sfmcsdk
 		/// with a C# delegate in place of the Kotlin function type. The delegate is invoked once,
 		/// on the SDK's initialization thread, with the terminal status.
 		/// </summary>
-		public static void Configure(Context context, SFMCSdkModuleConfig config, Action<InitializationStatus> onInitialized)
+		public static void Configure(Context context, SFMCSdkModuleConfig config, Action<IInitializationStatus> onInitialized)
 			=> Configure(context, config, new InitializationCallback(onInitialized));
 
 		/// <summary>
