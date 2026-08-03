@@ -41,8 +41,13 @@ jobs:
         id: compare
         run: |
           bound=$(sed -n 's:.*<SfmcNativeVersion>\(.*\)</SfmcNativeVersion>.*:\1:p' Directory.Build.props | head -1)
+          # Salesforce hand-rolls these metadata files, inconsistently between artifacts:
+          # this one carries <latest> today, the sibling marketingcloudsdk's does not (which is
+          # how its watch broke). Resolve the way build/check-upstream.sh's discover_maven does -
+          # every <version> tag, releases only, highest by version sort - needing no <latest>.
           latest=$(curl -fsSL "${SFMC_REPO}/sfmcsdk/maven-metadata.xml" \
-            | sed -n 's:.*<latest>\(.*\)</latest>.*:\1:p' | head -1)
+            | sed -n 's:.*<version>\([^<]*\)</version>.*:\1:p' \
+            | grep -E '^[0-9]+(\.[0-9]+)*$' | sort -V | tail -1)
           if [ -z "${bound}" ] || [ -z "${latest}" ]; then
             echo "::error::could not resolve the bound (${bound:-?}) or latest (${latest:-?}) sfmcsdk version"
             exit 1
