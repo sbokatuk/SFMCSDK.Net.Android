@@ -2,7 +2,9 @@
   <!--
     Rules are the exceptions, not the norm: the generator handles the rest of the surface
     unaided. Every rule states what breaks without it, so an upgrade can re-check whether the
-    upstream shape that motivated it still exists - an XPath that stops matching is silent.
+    upstream shape that motivated it still exists. The build log cannot tell a rule that still
+    matches from a stale one - BG8A00 ("matched no nodes") is printed either way, see below - so
+    every rule also says how to check it.
   -->
 
   <!--

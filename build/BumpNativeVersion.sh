@@ -6,8 +6,9 @@
 # What it does NOT automate, in the order you will meet it:
 #   - reviewing the checksum diff (a hash that changed for an unchanged version is the event
 #     the pins exist to catch);
-#   - re-checking the Transforms rules against the new .aar - an XPath that stops matching is
-#     silent (see src/SFMCSDK.Net.Android/Transforms/Metadata.xml);
+#   - re-checking the Transforms rules against the new .aar - the build log cannot tell a
+#     stale XPath from a live one, so compare api.xml with api.xml.fixed as described in
+#     src/SFMCSDK.Net.Android/Transforms/Metadata.xml;
 #   - the README's version pins (build/CheckReadmeVersions.sh will tell you);
 #   - a release-notes file under docs/release-notes/;
 #   - bumping SfmcBindingRevision back to 1 for the new native line.
