@@ -3,7 +3,7 @@
 # Keep-rules for consuming Android applications that build with R8 (AndroidLinkTool=r8).
 # See the .targets alongside for why .NET for Android needs these shipped explicitly.
 
-# ---- upstream consumer rules (sfmcsdk-3.1.1.aar proguard.txt), shipped verbatim ----
+# ---- upstream consumer rules (sfmcsdk-3.3.0.aar proguard.txt), shipped verbatim ----
 # Consumer ProGuard rules
 # These rules are applied to consumer applications to prevent ProGuard crashes
 
@@ -23,7 +23,7 @@
 
 # Prevent obfuscation warnings
 -dontwarn com.salesforce.marketingcloud.**
-# ---- upstream consumer rules (common-internal-1.0.0.aar proguard.txt), shipped verbatim ----
+# ---- upstream consumer rules (common-internal-1.1.0.aar proguard.txt), shipped verbatim ----
 # Consumer ProGuard rules
 # These rules are applied to consumer applications to prevent ProGuard crashes
 
