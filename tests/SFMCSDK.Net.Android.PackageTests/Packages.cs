@@ -34,7 +34,7 @@ public static class Packages
 
     /// <summary>
     /// The native .aars each package must ship for every target framework, and their minimum
-    /// plausible sizes. sfmcsdk is ~400 KB and common-internal ~12 KB; an .aar with no
+    /// plausible sizes. sfmcsdk is ~430 KB and common-internal ~20 KB; an .aar with no
     /// classes.jar is a couple of kilobytes, which is what the silent net8 empty-package failure
     /// produces.
     /// </summary>
