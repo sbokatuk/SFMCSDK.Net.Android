@@ -11,7 +11,17 @@
     compile against the projected Response type. Nothing user-facing is lost - Parcelable
     creators are called by the OS through reflection, never from C#. Carried over from the
     pre-rebuild sfmc-net-bindings-mobile repository, where it was needed for sfmcsdk 1.x; still
-    present in 3.1.1.
+    present, and still needed, in 3.3.0: without the rule every target framework fails with
+    CS0738, "'Response.Creator' does not implement interface member
+    'IParcelableCreator.CreateFromParcel(Parcel?)'".
+
+    How to re-check it on an upgrade. Do not go by the build log: the generator reports BG8A00
+    ("matched no nodes") for this rule on every build, on 3.1.1 and 3.3.0 alike, although the
+    rule does match. Compare the generator's input with its output instead -
+    obj/Release/<tfm>/api.xml must contain the class and api.xml.fixed must not:
+
+      xmllint -xpath "count(<the path below>)" obj/Release/<tfm>/api.xml        -> 1
+      xmllint -xpath "count(<the path below>)" obj/Release/<tfm>/api.xml.fixed  -> 0
   -->
   <remove-node path="/api/package[@name='com.salesforce.marketingcloud.sfmcsdk.components.http']/class[@name='Response.Creator']" />
 </metadata>
