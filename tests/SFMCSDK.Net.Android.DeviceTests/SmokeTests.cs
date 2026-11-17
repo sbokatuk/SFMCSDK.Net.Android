@@ -27,7 +27,8 @@ public static class SmokeTests
             // PermissionUtils is the marker for common-internal, which ships in this package
             // unbound - the class must still be dexed into the app. IntentUtils is the marker for
             // common-internal being new enough: it first appeared in 1.1.0 and sfmcsdk 3.3.0's
-            // BehaviorManagerImpl calls it. An app carrying 1.0.0 is killed at launch by a
+            // BehaviorManagerImpl.BehaviorReceiver calls it from onReceive (javap -c on
+            // BehaviorManagerImpl$BehaviorReceiver). An app carrying 1.0.0 is killed at launch by a
             // NoClassDefFoundError out of the SDK's init ContentProvider; with this lookup the log
             // names the missing class instead of leaving only a crash trace. The net9/net10
             // builds cannot produce that pair (XA4241); the direct-download path the net8 head

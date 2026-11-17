@@ -19,7 +19,8 @@
       see the csproj. One property so a bump is one edit plus a checksum regeneration.
 
       The pair moves together: sfmcsdk 3.3.0 is the first release whose classes call into
-      common-internal (BehaviorManagerImpl uses IntentUtils and IntentLog, both new in 1.1.0).
+      common-internal (onReceive of the nested BehaviorManagerImpl.BehaviorReceiver uses
+      IntentUtils and IntentLog, both new in 1.1.0).
       Measured with 3.3.0 beside 1.0.0: the net9/net10 heads refuse to build (XA4241, Java
       dependency 'common-internal:1.1.0' is not satisfied). The direct-download path, which the
       net8 head always takes, has no such verification, and an app using a package built that
