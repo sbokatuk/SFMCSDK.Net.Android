@@ -161,6 +161,8 @@ Merging a file named `docs/release-notes/<four-part-version>.md` to `main` **is*
 
 **`XA4241: Java dependency ... is not satisfied`.** A `.pom` dependency has no NuGet binding in your app's graph. The package declares everything sfmcsdk 3.3.0 needs; if you see this after adding other Android bindings, your graph resolved an AndroidX version below the `.pom`'s floor.
 
+**`javac error JAVAC0000: class file has wrong version 61.0, should be 55.0` in a `net8.0-android34.0` app.** The sfmcsdk `.aar` is Java 17 bytecode and the build compiled against it with JDK 11, which .NET 8 for Android still accepts (the net9 and net10 workloads refuse anything older than 17). Build with JDK 17: pass `-p:JavaSdkDirectory=<path to JDK 17>` or set that property in the project. `JAVA_HOME` alone is not a guarantee: the build skips it when it names a JDK newer than the workload supports and falls back to another installed one.
+
 **Restore fails with NU1301 about a missing `artifacts` source.** The repository's NuGet.config declares `./artifacts` as a local feed for samples and device tests. Run `./build/BuildNugets.sh` once, or build your own project outside this repository.
 
 ## Licence
