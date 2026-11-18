@@ -6,5 +6,5 @@
 # an UNCHANGED version is the tampering event these pins exist to catch.
 #
 # <file name> <sha256>
-sfmcsdk-3.1.1.aar 08c9034139feb11459eeb1b32519a324ada08614710d61d441da19b4d0568939
-common-internal-1.0.0.aar 60777baa788b430569a0316fe633c4ee7162e72e55e9f572d58fa54994c07aab
+sfmcsdk-3.3.0.aar 7eb1c6951c0174a85de9e0735efe7574debcf41e5ffae9d9c03ae862bdbdd538
+common-internal-1.1.0.aar 4940c70d6accd0d8beeb1bae18507541c425fbe360093af58d5398c0c7049b51

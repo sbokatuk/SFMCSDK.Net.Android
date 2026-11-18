@@ -174,6 +174,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The sample compiles Java against the same .aar as the device-test app, so it gets the
+      # same explicit JDK - the e2e job below has the reason.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       # The sample targets net10.0-android36.0 and so needs the .NET 10 SDK, not the .NET 9 one
       # global.json pins. MAUI 9 cannot build against the AndroidX generation these packages
       # depend on - see the version block in Directory.Build.props.
@@ -244,6 +252,25 @@ jobs:
             link-tool: r8
     steps:
       - uses: actions/checkout@v4
+
+      # The sfmcsdk .aar is Java 17 bytecode (class file version 61), so the javac that compiles
+      # the app's Java glue against it has to be 17 or newer. Which JDK that is used to be left to
+      # the runner image, and the image decides more than it looks: .NET for Android takes
+      # $JAVA_HOME only when its version is one the workload accepts (up to 21 in all three bands)
+      # and otherwise silently takes the first other installed JDK that is. ubuntu-24.04 defaults
+      # to 17, so every band used it. ubuntu-26.04 defaults to 25, which no band accepts; the
+      # net9 and net10 bands start at 17 and fell back to it, but the net8 band still accepts
+      # JDK 11, found that first, and failed with
+      #
+      #     javac error JAVAC0000: class file has wrong version 61.0, should be 55.0
+      #
+      # 17 is the oldest JDK that reads the .aar and one every band accepts. The pack job needs
+      # none: the bindings have no Java sources, so javac never runs there.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v4

@@ -25,7 +25,14 @@ public static class SmokeTests
             // Class.forName is the same lookup JNI performs; a missing .aar fails here with
             // ClassNotFoundException rather than three checks later with something baffling.
             // PermissionUtils is the marker for common-internal, which ships in this package
-            // unbound - the class must still be dexed into the app.
+            // unbound - the class must still be dexed into the app. IntentUtils is the marker for
+            // common-internal being new enough: it first appeared in 1.1.0 and sfmcsdk 3.3.0's
+            // BehaviorManagerImpl.BehaviorReceiver calls it from onReceive (javap -c on
+            // BehaviorManagerImpl$BehaviorReceiver). An app carrying 1.0.0 is killed at launch by a
+            // NoClassDefFoundError out of the SDK's init ContentProvider; with this lookup the log
+            // names the missing class instead of leaving only a crash trace. The net9/net10
+            // builds cannot produce that pair (XA4241); the direct-download path the net8 head
+            // takes has no Java dependency verification and can.
             //
             // The loader is passed explicitly: Class.forName(String) resolves against the caller's
             // loader, and a call made from managed code has no Java frame to take one from, so
@@ -36,6 +43,38 @@ public static class SmokeTests
 
             Java.Lang.Class.ForName("com.salesforce.marketingcloud.sfmcsdk.SFMCSdk", false, loader);
             Java.Lang.Class.ForName("com.salesforce.marketingcloud.internal.util.PermissionUtils", false, loader);
+            Java.Lang.Class.ForName("com.salesforce.marketingcloud.internal.util.IntentUtils", false, loader);
+            return Task.CompletedTask;
+        }),
+
+        new("packed_aar_is_the_version_the_binding_was_generated_from", () =>
+        {
+            // BuildConfig.VersionName is a C# const the generator copied out of the .aar when the
+            // binding was built; BuildConfig.VERSION_NAME read through reflection is what the
+            // .aar dexed into this app says at runtime. They disagree when the package carries a
+            // different .aar from the one it was generated against - a stale Maven cache, or a
+            // merge that grafted another line's assets - and the binding then calls members
+            // that are not there. Read from BuildConfig rather than SFMCSdk.SDK_VERSION_NAME
+            // because reading a static field initializes its class, and SFMCSdk's initializer
+            // is the SDK starting up - the next check's business, not this one's.
+            var loader = global::Android.App.Application.Context.ClassLoader
+                ?? throw new InvalidOperationException("The application context has no class loader.");
+
+            var packed = Java.Lang.Class
+                .ForName("com.salesforce.marketingcloud.sfmcsdk.BuildConfig", false, loader)
+                .GetField("VERSION_NAME")
+                .Get(null)?
+                .ToString();
+
+            Reporter($"native sfmcsdk version: {packed} (binding generated from {BuildConfig.VersionName})");
+
+            if (packed != BuildConfig.VersionName)
+            {
+                throw new InvalidOperationException(
+                    $"The packed sfmcsdk .aar reports version '{packed}', but the binding was " +
+                    $"generated from '{BuildConfig.VersionName}'.");
+            }
+
             return Task.CompletedTask;
         }),
 

@@ -33,6 +33,15 @@ SFMCSDK.Net.Android	sfmcsdk	-
 #   common
 #   legacy-crypto
 #
+#   inboxfeaturemodule           MobilePush's inbox modules, first published 2026-11 beside
+#   inboxmodelsmodule            marketingcloudsdk 12.0.0. Same family, same owner: the sibling
+#                                repository. Neither the sfmcsdk 3.3.0 nor the common-internal
+#                                1.1.0 .pom names them - the dependency runs the other way,
+#                                inboxfeaturemodule requires sfmcsdk - so nothing here needs
+#                                them. What this package does carry is sfmcsdk's own plug-in
+#                                point for them, modules.inboxfeature.InboxFeatureModuleConfig,
+#                                which is part of the sfmcsdk .aar and is bound with the rest.
+#
 #   mobileappmessaging           Mobile App Messaging (MAM) - a separate, optional Salesforce
 #   mobileappmessagingsdk        product on its own version line, not a dependency of either
 #                                bound family. A binding candidate once a consumer asks.

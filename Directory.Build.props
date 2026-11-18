@@ -2,28 +2,37 @@
 
   <PropertyGroup>
     <!--
-      Package versions are <sfmcsdk version>.<binding revision>, e.g. 3.1.1.1.
+      Package versions are <sfmcsdk version>.<binding revision>, e.g. 3.3.0.1.
 
       The first three components are the native Salesforce SFMC SDK (com.salesforce.marketingcloud:sfmcsdk)
       inside the package, resolved from Salesforce's own Maven repository. The fourth belongs to
       this repository and increments whenever the bindings or packaging change while the native
       artifact stays put.
     -->
-    <SfmcNativeVersion>3.1.1</SfmcNativeVersion>
+    <SfmcNativeVersion>3.3.0</SfmcNativeVersion>
     <SfmcBindingRevision>1</SfmcBindingRevision>
     <VersionPrefix>$(SfmcNativeVersion).$(SfmcBindingRevision)</VersionPrefix>
 
     <!--
       common-internal is versioned independently of sfmcsdk upstream (its own line, currently
-      1.0.0), declared by the sfmcsdk .pom and shipped inside this package as an unbound .aar -
+      1.1.0), declared by the sfmcsdk .pom and shipped inside this package as an unbound .aar -
       see the csproj. One property so a bump is one edit plus a checksum regeneration.
+
+      The pair moves together: sfmcsdk 3.3.0 is the first release whose classes call into
+      common-internal (onReceive of the nested BehaviorManagerImpl.BehaviorReceiver uses
+      IntentUtils and IntentLog, both new in 1.1.0).
+      Measured with 3.3.0 beside 1.0.0: the net9/net10 heads refuse to build (XA4241, Java
+      dependency 'common-internal:1.1.0' is not satisfied). The direct-download path, which the
+      net8 head always takes, has no such verification, and an app using a package built that
+      way is killed at launch by a NoClassDefFoundError for IntentLog out of the SDK's init
+      ContentProvider.
     -->
-    <SfmcCommonInternalVersion>1.0.0</SfmcCommonInternalVersion>
+    <SfmcCommonInternalVersion>1.1.0</SfmcCommonInternalVersion>
   </PropertyGroup>
 
   <!--
     Versions of the third-party binding packages that supply the Java types sfmcsdk's .aar links
-    against, matching the sfmcsdk 3.1.1 .pom exactly:
+    against, matching the sfmcsdk 3.3.0 .pom exactly (unchanged since 3.1.1):
 
       kotlin-stdlib 2.2.21, androidx.core:core-ktx 1.17.0, androidx.lifecycle:lifecycle-process
       2.10.0, androidx.annotation 1.9.1, play-services-basement 18.9.0, androidx.work:work-runtime
